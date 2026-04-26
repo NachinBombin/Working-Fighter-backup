@@ -35,66 +35,63 @@ if SERVER then
     -- LVS TEAM SETUP
     --   Team 1 = Combine / P-51  (friendly to each other)
     --   Team 2 = Players + Rebels (targets for the P-51)
-    -- AIGetTarget skips team-0 entities, so everyone who should
-    -- be a target MUST have a non-zero team assigned.
+    --
+    -- LVS:GetNPCRelationship / LVS:SetNPCRelationship work with
+    -- class strings and integer teams — NOT the same signature as
+    -- LVS:SetNPCRelationship(npcEntity) used in sv_entityrelationship.
+    -- We call them only after a short delay to guarantee LVS is ready.
     -- ============================================================
 
-    local P51_ENEMY_NPCS = {
-        -- rebels / resistance
-        ["npc_citizen"]          = true,
-        ["npc_rebel"]            = true,
-        ["npc_alyx"]             = true,
-        ["npc_barney"]           = true,
-        -- antlions / headcrabs are independent; leave at 0 unless desired
+    local P51_ENEMY_CLASSES = {
+        "npc_citizen",
+        "npc_rebel",
+        "npc_alyx",
+        "npc_barney",
     }
 
-    local P51_FRIENDLY_NPCS = {
-        ["npc_combine_s"]     = true,
-        ["npc_metropolice"]   = true,
-        ["npc_combine_elite"] = true,
-        ["npc_hunter"]        = true,
-        ["npc_strider"]       = true,
-        ["npc_helicopter"]    = true,
-        ["npc_combinegunship"]= true,
+    local P51_FRIENDLY_CLASSES = {
+        "npc_combine_s",
+        "npc_metropolice",
+        "npc_combine_elite",
+        "npc_hunter",
+        "npc_strider",
+        "npc_helicopter",
+        "npc_combinegunship",
     }
 
     local function P51_RegisterNPCTeams()
-        if not LVS then return end
-        for class, _ in pairs( P51_ENEMY_NPCS ) do
-            LVS:SetNPCRelationship( class, 2 )
+        if not LVS or not LVS.SetNPCTeam then return end
+        for _, class in ipairs( P51_ENEMY_CLASSES ) do
+            LVS:SetNPCTeam( class, 2 )
         end
-        for class, _ in pairs( P51_FRIENDLY_NPCS ) do
-            LVS:SetNPCRelationship( class, 1 )
+        for _, class in ipairs( P51_FRIENDLY_CLASSES ) do
+            LVS:SetNPCTeam( class, 1 )
         end
     end
 
-    -- Register on a short delay to make sure LVS is fully loaded
     timer.Simple( 1, P51_RegisterNPCTeams )
 
-    -- Also register whenever a map re-initialises
     hook.Add( "InitPostEntity", "P51Backup_RegisterTeams", function()
         timer.Simple( 1, P51_RegisterNPCTeams )
     end )
 
-    -- Players are the primary target: assign them to team 2 so
-    -- AIGetTarget sees them as enemies of the team-1 plane.
+    -- Players are the primary target — assign team 2 so the team-1
+    -- P-51 sees them as enemies via AIGetTarget.
     local function P51_SetPlayerTeam( ply )
         if not IsValid( ply ) then return end
-        -- lvsSetAITeam is the setter used by the LVS toolgun internals
         if ply.lvsSetAITeam then
             ply:lvsSetAITeam( 2 )
         end
     end
 
-    hook.Add( "PlayerInitialSpawn", "P51Backup_PlayerTeam", P51_SetPlayerTeam )
-    hook.Add( "PlayerSpawn",        "P51Backup_PlayerTeamRespawn", P51_SetPlayerTeam )
+    hook.Add( "PlayerInitialSpawn",   "P51Backup_PlayerTeam",        P51_SetPlayerTeam )
+    hook.Add( "PlayerSpawn",          "P51Backup_PlayerTeamRespawn", P51_SetPlayerTeam )
 
     hook.Add( "PlayerDisconnected", "P51Backup_PlayerTeamClean", function( ply )
         if not IsValid( ply ) then return end
         if ply.lvsSetAITeam then ply:lvsSetAITeam( 0 ) end
     end )
 
-    -- Also apply to any already-connected players (late load)
     timer.Simple( 2, function()
         for _, ply in ipairs( player.GetHumans() ) do
             P51_SetPlayerTeam( ply )
@@ -105,16 +102,16 @@ if SERVER then
     -- HELPERS
     -- ============================================================
 
-    local function P51_Debug(msg)
+    local function P51_Debug( msg )
         if not cv_announce:GetBool() then return end
-        local full = "[P51 Backup] " .. tostring(msg)
-        print(full)
-        for _, ply in ipairs(player.GetHumans()) do
-            if IsValid(ply) then ply:PrintMessage(HUD_PRINTCONSOLE, full) end
+        local full = "[P51 Backup] " .. tostring( msg )
+        print( full )
+        for _, ply in ipairs( player.GetHumans() ) do
+            if IsValid( ply ) then ply:PrintMessage( HUD_PRINTCONSOLE, full ) end
         end
     end
 
-    local function P51_CheckSkyAbove(pos)
+    local function P51_CheckSkyAbove( pos )
         local tr = util.TraceLine({
             start  = pos + Vector(0, 0, 50),
             endpos = pos + Vector(0, 0, 1050),
@@ -128,18 +125,18 @@ if SERVER then
         return not (tr.Hit and not tr.HitSky)
     end
 
-    local function P51_ThrowFlare(npc, targetPos)
+    local function P51_ThrowFlare( npc, targetPos )
         local npcEyePos = npc:EyePos()
         local toTarget  = (targetPos - npcEyePos):GetNormalized()
 
-        local flare = ents.Create("ent_bombin_flare_blue")
-        if not IsValid(flare) then
-            P51_Debug("Flare spawn failed")
+        local flare = ents.Create( "ent_bombin_flare_blue" )
+        if not IsValid( flare ) then
+            P51_Debug( "Flare spawn failed" )
             return nil
         end
 
-        flare:SetPos(npcEyePos + toTarget * 52)
-        flare:SetAngles(npc:GetAngles())
+        flare:SetPos( npcEyePos + toTarget * 52 )
+        flare:SetAngles( npc:GetAngles() )
         flare:Spawn()
         flare:Activate()
 
@@ -147,23 +144,23 @@ if SERVER then
         local dist = dir:Length()
         dir:Normalize()
 
-        timer.Simple(0, function()
-            if not IsValid(flare) then return end
+        timer.Simple( 0, function()
+            if not IsValid( flare ) then return end
             local phys = flare:GetPhysicsObject()
-            if not IsValid(phys) then return end
-            phys:SetVelocity(dir * 700 + Vector(0, 0, dist * 0.25))
+            if not IsValid( phys ) then return end
+            phys:SetVelocity( dir * 700 + Vector(0, 0, dist * 0.25) )
             phys:Wake()
         end)
 
-        net.Start("P51Backup_FlareSpawned")
-        net.WriteEntity(flare)
+        net.Start( "P51Backup_FlareSpawned" )
+        net.WriteEntity( flare )
         net.Broadcast()
 
-        P51_Debug("Flare thrown")
+        P51_Debug( "Flare thrown" )
         return flare
     end
 
-    local function P51_FindGround(centerPos)
+    local function P51_FindGround( centerPos )
         local startPos   = Vector(centerPos.x, centerPos.y, centerPos.z + 64)
         local endPos     = Vector(centerPos.x, centerPos.y, centerPos.z - 8192)
         local filterList = {}
@@ -178,8 +175,8 @@ if SERVER then
                     break
                 end
             end
-            if IsValid(tr.Entity) then
-                table.insert(filterList, tr.Entity)
+            if IsValid( tr.Entity ) then
+                table.insert( filterList, tr.Entity )
             else
                 break
             end
@@ -189,14 +186,14 @@ if SERVER then
         return -1
     end
 
-    local function P51_SpawnAtPos(centerPos, callDir)
-        local ground = P51_FindGround(centerPos)
+    local function P51_SpawnAtPos( centerPos, callDir )
+        local ground = P51_FindGround( centerPos )
         if ground == -1 then
             ground = centerPos.z
-            P51_Debug("FindGround failed — using caller Z as ground")
+            P51_Debug( "FindGround failed — using caller Z as ground" )
         end
 
-        ground = math.max(ground, centerPos.z - 256)
+        ground = math.max( ground, centerPos.z - 256 )
 
         local heightAdd = cv_height:GetFloat()
         local skyAlt    = ground + heightAdd
@@ -204,53 +201,59 @@ if SERVER then
         local spawnPos = centerPos - callDir * 2000
         spawnPos = Vector(spawnPos.x, spawnPos.y, skyAlt)
 
-        if not util.IsInWorld(spawnPos) then
+        if not util.IsInWorld( spawnPos ) then
             spawnPos = Vector(centerPos.x, centerPos.y, skyAlt)
         end
-        if not util.IsInWorld(spawnPos) then
+        if not util.IsInWorld( spawnPos ) then
             spawnPos = centerPos + Vector(0, 0, heightAdd)
-            P51_Debug("Spawn fallback to caller + height: " .. tostring(spawnPos))
+            P51_Debug( "Spawn fallback to caller + height: " .. tostring(spawnPos) )
         end
 
-        local ent = ents.Create("lvs_plane_p51v2")
-        if not IsValid(ent) then
-            P51_Debug("ents.Create returned invalid entity for lvs_plane_p51v2")
+        local ent = ents.Create( "lvs_plane_p51v2" )
+        if not IsValid( ent ) then
+            P51_Debug( "ents.Create returned invalid entity for lvs_plane_p51v2" )
             return false
         end
 
-        ent:SetPos(spawnPos)
+        ent:SetPos( spawnPos )
 
         local ang = callDir:Angle()
-        ent:SetAngles(Angle(0, ang.y + 70, 0))
+        ent:SetAngles( Angle(0, ang.y + 70, 0) )
 
         ent:Spawn()
         ent:Activate()
 
-        if not IsValid(ent) then
-            P51_Debug("Entity invalid after Spawn()")
+        if not IsValid( ent ) then
+            P51_Debug( "Entity invalid after Spawn()" )
             return false
         end
 
-        -- Team 1 = Combine-allied. Players are team 2, rebels are team 2.
-        -- AIGetTarget will now find and pursue them automatically.
-        ent:SetAITEAM( 1 )
+        -- CRITICAL ORDER:
+        -- SetAITEAM must come BEFORE SetAI(true).
+        -- SetAI(true) triggers OnToggleAI which immediately fires
+        -- hook "LVS.UpdateRelationship" — at that moment GetAITEAM()
+        -- must already return the correct team (1), otherwise the
+        -- relationship hook sees team 0 and marks the plane neutral,
+        -- causing AIGetTarget to skip all targets (team 0 = no targets).
+        -- With team 0 planes also have their CanShoot set to always-true
+        -- via the `or true` bug in sv_ai.lua, so they end up shooting
+        -- any LVS vehicle in their crosshair — including each other.
+        ent:SetAITEAM( 1 )           -- team 1 = Combine-allied, set FIRST
+        ent:SetAI( true )            -- enable AI AFTER team is committed
 
-        -- Enable the built-in LVS AI (same as using the toolgun)
-        ent:SetAI( true )
-
-        P51_Debug("P-51 spawned at " .. tostring(spawnPos))
+        P51_Debug( "P-51 spawned at " .. tostring(spawnPos) )
         return true
     end
 
-    local function P51_FireMunition(npc, target)
-        if not IsValid(npc) then P51_Debug("NPC invalid") return false end
-        if not IsValid(target) or not target:IsPlayer() or not target:Alive() then
-            P51_Debug("Target invalid") return false
+    local function P51_FireMunition( npc, target )
+        if not IsValid( npc ) then P51_Debug( "NPC invalid" ) return false end
+        if not IsValid( target ) or not target:IsPlayer() or not target:Alive() then
+            P51_Debug( "Target invalid" ) return false
         end
 
         local targetPos = target:GetPos() + Vector(0, 0, 36)
-        if not P51_CheckSkyAbove(targetPos) then
-            P51_Debug("No open sky above target") return false
+        if not P51_CheckSkyAbove( targetPos ) then
+            P51_Debug( "No open sky above target" ) return false
         end
 
         local callDir = targetPos - npc:GetPos()
@@ -259,15 +262,15 @@ if SERVER then
         if callDir:LengthSqr() <= 1 then callDir = Vector(1, 0, 0) end
         callDir:Normalize()
 
-        local flare = P51_ThrowFlare(npc, targetPos)
-        if not IsValid(flare) then P51_Debug("Flare failed") return false end
+        local flare = P51_ThrowFlare( npc, targetPos )
+        if not IsValid( flare ) then P51_Debug( "Flare failed" ) return false end
 
         local fallbackPos = Vector(targetPos.x, targetPos.y, targetPos.z)
         local storedDir   = Vector(callDir.x, callDir.y, callDir.z)
 
-        timer.Simple(cv_delay:GetFloat(), function()
+        timer.Simple( cv_delay:GetFloat(), function()
             local centerPos = IsValid(flare) and flare:GetPos() or fallbackPos
-            P51_SpawnAtPos(centerPos, storedDir)
+            P51_SpawnAtPos( centerPos, storedDir )
         end)
 
         return true
@@ -277,8 +280,8 @@ if SERVER then
     -- MANUAL SPAWN (button in menu / console command)
     -- ============================================================
 
-    net.Receive("P51Backup_ManualSpawn", function(len, ply)
-        if not IsValid(ply) then return end
+    net.Receive( "P51Backup_ManualSpawn", function( len, ply )
+        if not IsValid( ply ) then return end
 
         local tr = util.TraceLine({
             start  = ply:EyePos(),
@@ -293,10 +296,10 @@ if SERVER then
         if callDir:LengthSqr() <= 1 then callDir = Vector(1, 0, 0) end
         callDir:Normalize()
 
-        if P51_SpawnAtPos(centerPos, callDir) then
-            ply:PrintMessage(HUD_PRINTCENTER, "[Backup Fighter] P-51D inbound!")
+        if P51_SpawnAtPos( centerPos, callDir ) then
+            ply:PrintMessage( HUD_PRINTCENTER, "[Backup Fighter] P-51D inbound!" )
         else
-            ply:PrintMessage(HUD_PRINTCENTER, "[Backup Fighter] Spawn failed.")
+            ply:PrintMessage( HUD_PRINTCENTER, "[Backup Fighter] Spawn failed." )
         end
     end)
 
@@ -304,14 +307,14 @@ if SERVER then
     -- MAIN POLL TIMER
     -- ============================================================
 
-    timer.Create("P51Backup_Think", 0.5, 0, function()
+    timer.Create( "P51Backup_Think", 0.5, 0, function()
         if not cv_enabled:GetBool() then return end
 
         local now      = CurTime()
         local interval = math.max(1, cv_interval:GetFloat())
 
-        for _, npc in ipairs(ents.GetAll()) do
-            if not IsValid(npc) or not P51_CALLERS[npc:GetClass()] then continue end
+        for _, npc in ipairs( ents.GetAll() ) do
+            if not IsValid( npc ) or not P51_CALLERS[npc:GetClass()] then continue end
 
             if not npc.__p51backup_hooked then
                 npc.__p51backup_hooked    = true
@@ -328,16 +331,16 @@ if SERVER then
             if npc:Health() <= 0 then continue end
 
             local enemy = npc:GetEnemy()
-            if not IsValid(enemy) or not enemy:IsPlayer() or not enemy:Alive() then continue end
+            if not IsValid( enemy ) or not enemy:IsPlayer() or not enemy:Alive() then continue end
 
-            local dist = npc:GetPos():Distance(enemy:GetPos())
+            local dist = npc:GetPos():Distance( enemy:GetPos() )
             if dist > cv_max_dist:GetFloat() or dist < cv_min_dist:GetFloat() then continue end
 
             if math.random() > cv_chance:GetFloat() then continue end
 
-            if P51_FireMunition(npc, enemy) then
+            if P51_FireMunition( npc, enemy ) then
                 npc.__p51backup_lastCall = now
-                P51_Debug("Call accepted targeting " .. tostring(enemy))
+                P51_Debug( "Call accepted targeting " .. tostring(enemy) )
             end
         end
     end)
@@ -351,21 +354,21 @@ end -- SERVER
 if CLIENT then
     local p51_activeFlares = {}
 
-    net.Receive("P51Backup_FlareSpawned", function()
+    net.Receive( "P51Backup_FlareSpawned", function()
         local flare = net.ReadEntity()
-        if IsValid(flare) then
+        if IsValid( flare ) then
             p51_activeFlares[flare:EntIndex()] = flare
         end
     end)
 
-    hook.Add("Think", "P51Backup_FlareLight", function()
-        for idx, flare in pairs(p51_activeFlares) do
-            if not IsValid(flare) then
+    hook.Add( "Think", "P51Backup_FlareLight", function()
+        for idx, flare in pairs( p51_activeFlares ) do
+            if not IsValid( flare ) then
                 p51_activeFlares[idx] = nil
                 continue
             end
 
-            local dlight = DynamicLight(flare:EntIndex())
+            local dlight = DynamicLight( flare:EntIndex() )
             if dlight then
                 dlight.Pos        = flare:GetPos()
                 dlight.r          = 0
