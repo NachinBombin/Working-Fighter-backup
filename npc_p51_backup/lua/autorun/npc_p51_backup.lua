@@ -22,7 +22,7 @@ if SERVER then
     local cv_announce = CreateConVar("npc_p51backup_announce", "0",    SHARED_FLAGS, "Debug prints")
 
     -- ============================================================
-    -- NPC callers
+    -- NPC callers  (Combine-side — they call in the P-51)
     -- ============================================================
 
     local P51_CALLERS = {
@@ -30,6 +30,76 @@ if SERVER then
         ["npc_metropolice"]   = true,
         ["npc_combine_elite"] = true,
     }
+
+    -- ============================================================
+    -- LVS TEAM SETUP
+    --   Team 1 = Combine / P-51  (friendly to each other)
+    --   Team 2 = Players + Rebels (targets for the P-51)
+    -- AIGetTarget skips team-0 entities, so everyone who should
+    -- be a target MUST have a non-zero team assigned.
+    -- ============================================================
+
+    local P51_ENEMY_NPCS = {
+        -- rebels / resistance
+        ["npc_citizen"]          = true,
+        ["npc_rebel"]            = true,
+        ["npc_alyx"]             = true,
+        ["npc_barney"]           = true,
+        -- antlions / headcrabs are independent; leave at 0 unless desired
+    }
+
+    local P51_FRIENDLY_NPCS = {
+        ["npc_combine_s"]     = true,
+        ["npc_metropolice"]   = true,
+        ["npc_combine_elite"] = true,
+        ["npc_hunter"]        = true,
+        ["npc_strider"]       = true,
+        ["npc_helicopter"]    = true,
+        ["npc_combinegunship"]= true,
+    }
+
+    local function P51_RegisterNPCTeams()
+        if not LVS then return end
+        for class, _ in pairs( P51_ENEMY_NPCS ) do
+            LVS:SetNPCRelationship( class, 2 )
+        end
+        for class, _ in pairs( P51_FRIENDLY_NPCS ) do
+            LVS:SetNPCRelationship( class, 1 )
+        end
+    end
+
+    -- Register on a short delay to make sure LVS is fully loaded
+    timer.Simple( 1, P51_RegisterNPCTeams )
+
+    -- Also register whenever a map re-initialises
+    hook.Add( "InitPostEntity", "P51Backup_RegisterTeams", function()
+        timer.Simple( 1, P51_RegisterNPCTeams )
+    end )
+
+    -- Players are the primary target: assign them to team 2 so
+    -- AIGetTarget sees them as enemies of the team-1 plane.
+    local function P51_SetPlayerTeam( ply )
+        if not IsValid( ply ) then return end
+        -- lvsSetAITeam is the setter used by the LVS toolgun internals
+        if ply.lvsSetAITeam then
+            ply:lvsSetAITeam( 2 )
+        end
+    end
+
+    hook.Add( "PlayerInitialSpawn", "P51Backup_PlayerTeam", P51_SetPlayerTeam )
+    hook.Add( "PlayerSpawn",        "P51Backup_PlayerTeamRespawn", P51_SetPlayerTeam )
+
+    hook.Add( "PlayerDisconnected", "P51Backup_PlayerTeamClean", function( ply )
+        if not IsValid( ply ) then return end
+        if ply.lvsSetAITeam then ply:lvsSetAITeam( 0 ) end
+    end )
+
+    -- Also apply to any already-connected players (late load)
+    timer.Simple( 2, function()
+        for _, ply in ipairs( player.GetHumans() ) do
+            P51_SetPlayerTeam( ply )
+        end
+    end )
 
     -- ============================================================
     -- HELPERS
@@ -161,7 +231,12 @@ if SERVER then
             return false
         end
 
-        ent:SetAITEAM( 1 ) -- Combine allied
+        -- Team 1 = Combine-allied. Players are team 2, rebels are team 2.
+        -- AIGetTarget will now find and pursue them automatically.
+        ent:SetAITEAM( 1 )
+
+        -- Enable the built-in LVS AI (same as using the toolgun)
+        ent:SetAI( true )
 
         P51_Debug("P-51 spawned at " .. tostring(spawnPos))
         return true
