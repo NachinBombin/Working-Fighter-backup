@@ -161,6 +161,8 @@ if SERVER then
             return false
         end
 
+        ent:SetAITEAM( 1 ) -- Combine allied
+
         P51_Debug("P-51 spawned at " .. tostring(spawnPos))
         return true
     end
