@@ -2,50 +2,6 @@ AddCSLuaFile( "shared.lua" )
 AddCSLuaFile( "cl_init.lua" )
 include( "shared.lua" )
 
--- ── AI Behavior Cycle ─────────────────────────────────────────
--- Phase A: 10s  → AITEAM 1 (Combine-allied, hostile to players)
--- Phase B: 18s  → AITEAM 0 (neutral, attacks nobody)
--- Then loops forever.
-
-local PHASE_A_TEAM     = 1
-local PHASE_A_DURATION = 40
-local PHASE_B_TEAM     = 0
-local PHASE_B_DURATION = 6
-
-local function StartAICycle( ent )
-    if not IsValid( ent ) then return end
-
-    -- ── Phase A ───────────────────────────────────────────────
-    local function doPhaseA()
-        if not IsValid( ent ) then return end
-        ent:SetAI( false )          -- briefly reset so team change registers
-        ent:SetAITEAM( PHASE_A_TEAM )
-        ent:SetAI( true )
-
-        timer.Simple( PHASE_A_DURATION, function()
-            if not IsValid( ent ) then return end
-            doPhaseB()
-        end)
-    end
-
-    -- ── Phase B ───────────────────────────────────────────────
-    function doPhaseB()
-        if not IsValid( ent ) then return end
-        ent:SetAI( false )
-        ent:SetAITEAM( PHASE_B_TEAM )
-        ent:SetAI( true )
-
-        timer.Simple( PHASE_B_DURATION, function()
-            if not IsValid( ent ) then return end
-            doPhaseA()
-        end)
-    end
-
-    doPhaseA()  -- kick off with Phase A
-end
-
--- ─────────────────────────────────────────────────────────────
-
 function ENT:OnSpawn( PObj )
     PObj:SetMass( 5000 )
 
@@ -77,9 +33,10 @@ function ENT:OnSpawn( PObj )
         self.MISSILE_ENTITIES[ ID ] = Missile
     end
 
-    -- Defer cycle start one tick so LVS NetworkVars are ready
     timer.Simple( 0.1, function()
-        StartAICycle( self )
+        if not IsValid( self ) then return end
+        self:SetAITEAM( 1 )
+        self:SetAI( true )
     end)
 end
 
