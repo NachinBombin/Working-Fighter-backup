@@ -35,7 +35,7 @@ function ENT:OnSpawn( PObj )
 
     timer.Simple( 0.1, function()
         if not IsValid( self ) then return end
-        self:SetAITEAM( 1 )
+        self:SetAITEAM( 3 ) -- team 3 = targets everyone including team-0 players
         self:SetAI( true )
     end)
 end

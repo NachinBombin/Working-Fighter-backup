@@ -2,7 +2,7 @@ ENT.Base = "lvs_base_fighterplane"
 
 ENT.PrintName       = "P-51D V2 (AI Combine)"
 ENT.Author          = "Nachin Bombin"
-ENT.Information     = "P-51D — auto-spawns with AI active, allied to Combines."
+ENT.Information     = "P-51D — auto-spawns with AI active, hostile to all."
 ENT.Category        = "[LVS] - Planes"
 
 ENT.VehicleCategory    = "Planes"
@@ -13,8 +13,8 @@ ENT.AdminSpawnable  = false
 
 ENT.MDL = "models/blu/p51d.mdl"
 
--- AITEAM 1 = Combine-allied (enemy of Rebels/Players by default)
-ENT.AITEAM = 1
+-- AITEAM 3 = attacks everyone, including team-0 players
+ENT.AITEAM = 3
 
 ENT.MaxVelocity     = 2500
 ENT.MaxPerfVelocity = 1800
